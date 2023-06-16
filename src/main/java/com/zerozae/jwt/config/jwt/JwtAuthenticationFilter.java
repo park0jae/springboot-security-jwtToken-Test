@@ -4,6 +4,7 @@ import com.auth0.jwt.JWT;
 import com.auth0.jwt.algorithms.Algorithm;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zerozae.jwt.config.auth.PrincipalDetails;
+import com.zerozae.jwt.dto.LoginRequestDto;
 import com.zerozae.jwt.model.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,33 +37,34 @@ public class JwtAuthenticationFilter extends UsernamePasswordAuthenticationFilte
         log.info("JwtAuthenticationFilter : 로그인 시도 중");
 
         // 1. username, password 받아서
+
+        ObjectMapper om = new ObjectMapper();
+        LoginRequestDto loginRequestDto = null;
         try {
-
-            ObjectMapper om = new ObjectMapper();
-            User user = om.readValue(request.getInputStream(), User.class);
-
-            log.info("user ={}" ,user);
-
-            // 로그인시도를 위한 토큰 생성
-            UsernamePasswordAuthenticationToken authenticationToken = new UsernamePasswordAuthenticationToken(user.getUsername(), user.getPassword());
-
-            // PrincipalDetailsService의 loadUserByUsername() 메서드가 실행된 후 정상이면 authentication이 리턴됨
-            // DB에 있는 username과 password가 일치한다.
-            Authentication authentication = authenticationManager.authenticate(authenticationToken);
-
-            // ==> 로그인이 되었다는 뜻
-            PrincipalDetails principal = (PrincipalDetails) authentication.getPrincipal();
-            log.info("로그인 완료됨 = {}" ,principal.getUser().getUsername());
-
-            // authentication 객체가 session영역에 저장을 해야하고 그 방법이 return 해주면 됨
-            // 리턴의 이유는 권한 관리를 security가 대신 해주기 때문에 편하려고 하는거임.
-            // 굳이 JWT 토큰을 사용하면서 세션을 만들 이유가 없음. 근데 단지 권한 처리 떄문에 session에 넣어줌
-
-            // JWT 토큰을 만들
-            return authentication;
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+            loginRequestDto = om.readValue(request.getInputStream(), LoginRequestDto.class);
+        } catch (Exception e) {
+            e.printStackTrace();
         }
+
+        log.info("user ={}" ,loginRequestDto);
+
+        // 로그인시도를 위한 토큰 생성
+        UsernamePasswordAuthenticationToken authenticationToken = new UsernamePasswordAuthenticationToken(loginRequestDto.getUsername(), loginRequestDto.getPassword());
+
+        // PrincipalDetailsService의 loadUserByUsername() 메서드가 실행된 후 정상이면 authentication이 리턴됨
+        // DB에 있는 username과 password가 일치한다.
+        Authentication authentication = authenticationManager.authenticate(authenticationToken);
+
+        // ==> 로그인이 되었다는 뜻
+        PrincipalDetails principal = (PrincipalDetails) authentication.getPrincipal();
+        log.info("로그인 완료됨 = {}" ,principal.getUser().getUsername());
+
+        // authentication 객체가 session영역에 저장을 해야하고 그 방법이 return 해주면 됨
+        // 리턴의 이유는 권한 관리를 security가 대신 해주기 때문에 편하려고 하는거임.
+        // 굳이 JWT 토큰을 사용하면서 세션을 만들 이유가 없음. 근데 단지 권한 처리 떄문에 session에 넣어줌
+
+        // JWT 토큰을 만들
+        return authentication;
     }
 
     // attemptAuthentication 실행 후 인증이 정상적으로 되었으면 successfulAuthentication 함수가 실행됨
@@ -76,12 +78,12 @@ public class JwtAuthenticationFilter extends UsernamePasswordAuthenticationFilte
         String jwtToken = JWT.create()
                 .withSubject("zerozae 토큰")
                         // 만료시간
-                        .withExpiresAt(new Date(System.currentTimeMillis() + (60000 * 10)))
+                        .withExpiresAt(new Date(System.currentTimeMillis()+JwtProperties.EXPIRATION_TIME))
                         .withClaim("id", principal.getUser().getId())
                         .withClaim("username", principal.getUser().getUsername())
-                        .sign(Algorithm.HMAC512("zerozae"));
+                        .sign(Algorithm.HMAC512(JwtProperties.SECRET));
 
 
-        response.addHeader("Authorization", "Bearer " + jwtToken);
+        response.addHeader(JwtProperties.HEADER_STRING, JwtProperties.TOKEN_PREFIX+jwtToken);
     }
 }
